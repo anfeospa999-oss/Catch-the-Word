@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Catch the Word — ADSO Arcade</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .hud-action{min-height:32px;padding:0 12px;border:1px solid #69e0ff6b;border-radius:9px;color:#d9f8ff;background:#0b1b32cc;font:700 10px/1 'Orbitron',sans-serif;letter-spacing:.08em;cursor:pointer}.hud-action:hover,.hud-action:focus-visible{border-color:#79eaff;box-shadow:0 0 18px #53dcff40}
+    .pause-panel{position:fixed;z-index:40;inset:0;display:grid;place-items:center;padding:20px;background:#020611d6;backdrop-filter:blur(8px);animation:fade-in .2s ease}.pause-panel-inner{width:min(360px,90vw);padding:28px;text-align:center;border:1px solid #4d80a7;border-radius:18px;background:linear-gradient(145deg,#18294a,#090f20);box-shadow:0 20px 70px #0008,0 0 34px #45bdff24}.pause-panel-inner h2{margin:7px 0 9px;color:#e7fbff;letter-spacing:.08em}.pause-panel-inner p:not(.game-kicker){margin:0 0 20px;color:#9cb8c9}.pause-panel-inner .text-button{margin-top:13px}.game-wrap.is-paused .game-area{filter:saturate(.62) brightness(.68)}.game-wrap.is-paused .arena-floor,.game-wrap.is-paused .capture-zone{animation-play-state:paused}@media(min-width:701px){.page-shell{width:min(1120px,96vw)}.game-card{padding-left:clamp(18px,3vw,30px);padding-right:clamp(18px,3vw,30px)}.game-area{width:100%}}@media(max-width:700px){.hud-action{min-height:30px;padding:0 9px;font-size:9px}.pause-panel-inner{padding:24px 20px}}
+    .player{bottom:28px}.capture-zone{bottom:11%}.reaction-label{bottom:24%}@media(max-width:700px){.capture-zone{bottom:6%}.reaction-label{bottom:18%}}
+  </style>
+</head>
+<body>
+  <main class="page-shell">
+    <section class="game-card" aria-label="Catch the Word game">
+      <header class="game-header">
+        <div>
+          <p class="eyebrow">ADSO • BILINGUAL DAY</p>
+          <div class="brand-lockup"><span class="logo-lock" aria-hidden="true"><i></i><b></b></span><h1>CATCH THE WORD</h1></div>
+          <p class="subtitle">English Vocabulary Game</p>
+        </div>
+        <button id="sound-button" class="sound-button" aria-label="Toggle sound">🔊</button>
+      </header>
+
+      <div id="menu-panel" class="screen-panel menu-scene">
+        <div class="menu-particles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="menu-word word-a">CAT</div><div class="menu-word word-b">BOOK</div><div class="menu-word word-c">DOG</div><div class="menu-word word-d">CODE</div><div class="menu-word word-e">APPLE</div>
+        <div class="hero-mark">⌁</div>
+        <p class="game-kicker">ENGLISH ARCADE</p>
+        <h2>READY TO PLAY?</h2>
+        <p>Catch the correct English words!</p>
+        <div class="menu-avatar" aria-hidden="true"><span class="avatar"><i class="avatar-head"></i><i class="avatar-body"></i><i class="avatar-arm left"></i><i class="avatar-arm right"></i><i class="avatar-leg left"></i><i class="avatar-leg right"></i></span><b class="player-shadow"></b></div>
+        <div class="difficulty-picker" role="group" aria-label="Select difficulty">
+          <button class="difficulty active" data-difficulty="easy"><b>EASY</b><small>3 words</small></button>
+          <button class="difficulty" data-difficulty="medium"><b>MEDIUM</b><small>4 words</small></button>
+          <button class="difficulty" data-difficulty="hard"><b>HARD</b><small>5 words</small></button>
+        </div>
+        <label class="category-picker">VOCABULARY TARGET<select id="category-select"><option value="RANDOM">RANDOM CATEGORY</option><option value="ANIMALS">ANIMALS</option><option value="FOOD">FOOD</option><option value="OBJECTS">OBJECTS</option><option value="TECHNOLOGY">TECHNOLOGY</option><option value="CLOTHES">CLOTHES</option><option value="PLACES">PLACES</option><option value="TRANSPORTATION">TRANSPORTATION</option><option value="JOBS">JOBS</option><option value="ACTIONS">ACTIONS</option><option value="NATURE">NATURE</option></select></label>
+        <button id="start-button" class="primary-button">▶ PLAY</button>
+        <button id="how-button" class="text-button how-button">HOW TO PLAY</button>
+        <p class="instruction desktop-instruction">Use <kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to move</p>
+        <p class="instruction mobile-instruction">Use the buttons below to move</p>
+      </div>
+
+      <div id="game-screen" class="hidden">
+        <div class="hud" aria-live="polite">
+          <div class="stat lives-stat"><span>LIVES</span><strong id="lives">❤️ ❤️ ❤️</strong></div>
+          <div class="stat blaster-stat"><span>BLASTER</span><strong id="blaster-energy">⚡ 3</strong></div>
+          <div class="stat"><span>SCORE</span><strong id="score">0</strong></div>
+          <div class="stat"><span>BEST</span><strong id="best-score">0</strong></div>
+          <div class="stat time-stat"><span>TIME</span><strong id="time">60</strong></div>
+        </div>
+        <div class="objective" id="objective"><span class="target-kicker">VOCABULARY TARGET</span><strong>🎯 CATCH ONLY ANIMALS</strong><span id="power-status" class="power-status hidden" aria-live="polite"></span></div>
+        <div class="game-wrap">
+        <div id="game-area" class="game-area" aria-label="Game area">
+          <div class="lane lane-one"></div><div class="lane lane-two"></div><div class="lane lane-three"></div><div class="arena-glow"></div><div class="arena-floor"></div>
+          <div id="words" aria-live="off"></div>
+          <div class="capture-zone" aria-hidden="true"><span></span><i></i></div><div id="reaction-label" class="reaction-label" aria-hidden="true">TARGET LOCK</div>
+          <div id="player" class="player" aria-label="Player"><span class="avatar"><i class="avatar-head"></i><i class="avatar-body"></i><i class="avatar-arm left"></i><i class="avatar-arm right"></i><i class="avatar-leg left"></i><i class="avatar-leg right"></i><i class="avatar-blaster"></i></span><b class="player-shadow"></b></div>
+          <canvas id="particle-canvas" aria-hidden="true"></canvas>
+          <div id="floating-points" class="floating-points"></div>
+          <div id="countdown" class="countdown hidden"><span id="countdown-label">TARGET LOCKED</span><strong id="countdown-number">3</strong></div>
+        </div>
+        <div id="message" class="message" role="status">Catch a word to begin!</div>
+        <div class="combo-strip"><span id="combo">COMBO x0</span><span id="difficulty-label">EASY</span></div>
+        </div>
+        <div class="controls-row">
+          <p class="keyboard-hint"><span>MOVE</span> <kbd>←</kbd> <kbd>→</kbd> <em>or</em> <kbd>A</kbd> <kbd>D</kbd></p>
+          <div class="touch-controls" aria-label="Touch controls"><button class="hud-action" id="pause-button" aria-label="Pause game">Ⅱ PAUSE</button><button class="hud-action blast-button" id="blast-button" aria-label="Fire blaster">🔫 BLAST</button><button class="control-button" id="left-button" aria-label="Move left">◀</button><button class="control-button" id="right-button" aria-label="Move right">▶</button></div>
+        </div>
+      </div>
+
+      <div id="game-over-panel" class="game-over-panel hidden">
+        <div class="game-over-content">
+          <div class="hero-mark trophy">★</div>
+          <p class="game-kicker">RUN COMPLETE</p>
+          <h2 id="game-over-title" class="game-over-title">TIME'S UP!</h2>
+          <div class="results-grid game-over-stats"><div class="game-over-stat"><span>🎯 FINAL SCORE</span><strong id="final-score">0</strong></div><div class="game-over-stat"><span>🏅 BEST SCORE</span><strong id="final-best">0</strong></div><div class="game-over-stat"><span>🏆 WORDS CAUGHT</span><strong id="final-caught">0</strong></div><div class="game-over-stat"><span>🔥 BEST COMBO</span><strong id="final-combo">x0</strong></div></div>
+          <p id="final-category" class="final-category">🎯 CATCH ONLY ANIMALS</p>
+          <p id="performance-message" class="performance-message">KEEP PRACTICING!</p>
+          <p id="new-best" class="new-best hidden">🏆 NEW BEST!</p>
+          <div class="game-over-actions"><button id="again-button" class="primary-button">▶ PLAY AGAIN</button><button id="menu-button" class="text-button">BACK TO MAIN MENU</button></div>
+        </div>
+      </div>
+
+      <div id="pause-panel" class="pause-panel hidden" role="dialog" aria-modal="true" aria-labelledby="pause-title"><div class="pause-panel-inner"><p class="game-kicker">SYSTEM HOLD</p><h2 id="pause-title">GAME PAUSED</h2><p>Your run is safe. Resume when you are ready.</p><button id="resume-button" class="primary-button">▶ RESUME</button><button id="quit-pause-button" class="text-button">QUIT TO MENU</button></div></div>
+
+      <div class="controls-row menu-controls">
+        <p class="keyboard-hint"><span>ADSO ARCADE</span> Learn · Move · Code</p>
+        <div class="touch-controls" aria-label="Touch controls">
+          <button class="control-button" id="menu-left-button" aria-label="Move left">◀</button>
+          <button class="control-button" id="menu-right-button" aria-label="Move right">▶</button>
+        </div>
+      </div>
+
+      <div id="how-panel" class="how-panel hidden" role="dialog" aria-modal="true" aria-labelledby="how-title">
+        <div class="how-panel-inner"><button id="close-how" class="close-button" aria-label="Close instructions">×</button><p class="game-kicker">TRAINING PROTOCOL</p><h2 id="how-title">HOW TO PLAY</h2><p>Read the words as they come from the distance, then decide when to move.</p><div class="how-grid"><div><strong>MOVE</strong><kbd>←</kbd> <kbd>→</kbd><kbd>A</kbd> <kbd>D</kbd><small>Control your runner</small></div><div><strong>WATCH</strong><span class="how-icon">◌</span><small>Words come from the distance</small></div><div><strong>READ</strong><span class="how-icon">◎</span><small>Wait for words to become clear</small></div><div><strong>CATCH</strong><span class="how-icon">⌾</span><small>Catch the correct words</small></div><div><strong>AVOID</strong><span class="how-icon danger">×</span><small>Do not catch wrong words</small></div><div><strong>COMBO</strong><span class="how-icon combo">✦</span><small>Build your combo</small></div><div><strong>POWER-UPS</strong><span class="how-icon power">⚡</span><small>Use special abilities</small></div><div><strong>SCORING</strong><span class="score-key">+10 / −5</span><small>Correct / Wrong</small></div></div><section class="category-examples"><h3>VOCABULARY CATEGORIES</h3><div class="category-grid"><div><b>ANIMALS</b><span>CAT · DOG · LION · TIGER · HORSE</span></div><div><b>FOOD</b><span>APPLE · PIZZA · BREAD · CHEESE · BANANA</span></div><div><b>OBJECTS</b><span>BOOK · CHAIR · TABLE · PHONE · CLOCK</span></div><div><b>TECHNOLOGY</b><span>COMPUTER · KEYBOARD · MOUSE · SCREEN · ROBOT</span></div><div><b>CLOTHES</b><span>SHIRT · SHOES · JACKET · HAT · PANTS</span></div><div><b>PLACES</b><span>SCHOOL · HOSPITAL · PARK · HOTEL · AIRPORT</span></div><div><b>TRANSPORTATION</b><span>CAR · BUS · TRAIN · PLANE · BICYCLE</span></div><div><b>JOBS</b><span>DOCTOR · TEACHER · PILOT · CHEF · ENGINEER</span></div><div><b>ACTIONS</b><span>RUN · JUMP · SWIM · READ · WRITE</span></div><div><b>NATURE</b><span>TREE · RIVER · MOUNTAIN · FLOWER · CLOUD</span></div></div></section><p class="how-tip">See it. Read it. Decide. Catch the right word.</p></div>
+      </div>
+    </section>
+    <footer>Learn · Move · Code</footer>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
