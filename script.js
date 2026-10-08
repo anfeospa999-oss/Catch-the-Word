@@ -29,11 +29,23 @@ let musicTimer;
 let musicStep = 0;
 let state = makeState();
 let particles = [];
+const heldKeys = new Set(); // tracks currently held movement keys/buttons
+let walkInterval = null;    // interval for continuous movement when holding
 
 function makeState() { return { playing: false, counting: false, isPaused: false, category: 'ANIMALS', score: 0, combo: 0, bestCombo: 0, lives: 3, time: 60, caught: 0, playerX: 50, blasterEnergy: 3, words: [], lastSpawn: 0, lastPowerUpAt: -10000, powerUpsSpawned: 0, powerUpActive: false, animationId: null, timerId: null, shield: false, slowUntil: 0, speedUntil: 0, doubleUntil: 0 }; }
 function randomItem(list) { return list[Math.floor(Math.random() * list.length)]; }
 function bestScore() { return Number(localStorage.getItem('catchTheWordBest') || 0); }
-function setMessage(text, type = '') { message.textContent = text; message.className = `message ${type}`; }
+let _msgTimer = null;
+function setMessage(text, type = '') {
+  clearTimeout(_msgTimer);
+  if (!text) { message.textContent = ''; message.className = 'message'; return; }
+  message.className = 'message'; void message.offsetWidth;
+  message.textContent = text; message.className = `message ${type}`;
+  _msgTimer = setTimeout(() => {
+    message.classList.add('fading');
+    message.addEventListener('animationend', () => { message.textContent = ''; message.className = 'message'; }, { once: true });
+  }, 2000);
+}
 function resizeCanvas() { particleCanvas.width = gameArea.clientWidth; particleCanvas.height = gameArea.clientHeight; }
 function burstParticles(x, y, color = '#75f5df', amount = 14) {
   for (let index = 0; index < amount && particles.length < 90; index += 1) particles.push({ x, y, vx: (Math.random() - .5) * 3.8, vy: (Math.random() - .5) * 3.8 - 1, life: 1, color, size: 2 + Math.random() * 3 });
@@ -147,12 +159,33 @@ async function runCountdown() {
   state.timerId = setInterval(updateTimer, 1000);
   state.animationId = requestAnimationFrame(gameLoop);
 }
+const categoryEmojis = { ANIMALS:'🦁', FOOD:'🍕', OBJECTS:'📦', TECHNOLOGY:'💻', CLOTHES:'👕', PLACES:'📍', TRANSPORTATION:'🚗', JOBS:'👷', ACTIONS:'🏃', NATURE:'🌿' };
+async function showCategoryAnnouncement(category) {
+  const overlay = document.createElement('div');
+  overlay.id = 'category-announce';
+  overlay.innerHTML = `
+    <div class="ca-inner">
+      <p class="ca-eyebrow">VOCABULARY TARGET</p>
+      <div class="ca-emoji">${categoryEmojis[category] || '🎯'}</div>
+      <h2 class="ca-category">${category}</h2>
+      <p class="ca-goal">Catch only <strong>${category}</strong> words!<br><span>Let wrong words pass — avoid them!</span></p>
+      <div class="ca-bar"><div class="ca-bar-fill"></div></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  // Trigger the bar animation
+  requestAnimationFrame(() => requestAnimationFrame(() => overlay.querySelector('.ca-bar-fill').style.width = '100%'));
+  await wait(2600);
+  overlay.classList.add('ca-out');
+  await wait(380);
+  overlay.remove();
+}
 function startGame() {
   if (state.playing || state.counting) return;
   if (state.animationId) cancelAnimationFrame(state.animationId); if (state.timerId) clearInterval(state.timerId);
   state = makeState(); state.counting = true; const requestedCategory = $('category-select').value; state.category = requestedCategory === 'RANDOM' ? randomItem(Object.keys(categories)) : requestedCategory;
   wordsContainer.innerHTML = ''; particles = []; resizeCanvas(); gameCard.classList.remove('run-complete'); gameWrap.classList.remove('is-paused'); $('pause-panel').classList.add('hidden'); player.style.left = '50%'; $('menu-panel').classList.add('hidden'); $('game-over-panel').classList.add('hidden'); $('game-screen').classList.remove('hidden'); updateHud(); $('objective').classList.remove('target-pulse'); void $('objective').offsetWidth; $('objective').classList.add('target-pulse'); setMessage('Catch the correct words!', 'success');
-  startMusic(); runCountdown();
+  startMusic();
+  showCategoryAnnouncement(state.category).then(() => runCountdown());
 }
 const spawnLanes = [8, 25, 42, 58, 75, 90];
 function chooseSpawnX(minDistance = 17) {
@@ -277,10 +310,42 @@ function pauseGame() { if (!state.playing || state.isPaused) return; state.isPau
 function resumeGame() { if (!state.isPaused) return; state.isPaused = false; $('pause-panel').classList.add('hidden'); gameWrap.classList.remove('is-paused'); state.lastSpawn = performance.now(); resumeMusic(); state.timerId = setInterval(updateTimer, 1000); state.animationId = requestAnimationFrame(gameLoop); }
 function togglePause() { if (state.isPaused) resumeGame(); else pauseGame(); }
 function goToMenu() { clearGameState(); gameCard.classList.remove('run-complete'); $('game-over-panel').classList.add('hidden'); $('game-screen').classList.add('hidden'); $('menu-panel').classList.remove('hidden'); }
-function movePlayer(direction) { if (!state.playing) return; const settings = difficultySettings[selectedDifficulty]; const boost = performance.now() < state.speedUntil ? 1.65 : 1; state.playerX = Math.max(8, Math.min(92, state.playerX + direction * settings.playerStep * boost)); player.style.left = `${state.playerX}%`; player.classList.remove('moving'); void player.offsetWidth; player.classList.add('moving'); clearTimeout(player.moveTimer); player.moveTimer = setTimeout(() => player.classList.remove('moving'), 180); }
-document.addEventListener('keydown', event => { const key = event.key.toLowerCase(); if (key === 'escape' && (state.playing || state.isPaused)) { event.preventDefault(); togglePause(); return; } if (key === ' ' || event.code === 'Space') { event.preventDefault(); fireBlaster(); return; } if (['arrowleft','arrowright','a','d'].includes(key)) event.preventDefault(); if (key === 'arrowleft' || key === 'a') movePlayer(-1); if (key === 'arrowright' || key === 'd') movePlayer(1); });
+function movePlayer(direction) { if (!state.playing) return; const settings = difficultySettings[selectedDifficulty]; const boost = performance.now() < state.speedUntil ? 1.65 : 1; state.playerX = Math.max(8, Math.min(92, state.playerX + direction * settings.playerStep * boost)); player.style.left = `${state.playerX}%`; }
+function startWalking(direction) {
+  if (heldKeys.has(direction)) return;
+  heldKeys.add(direction);
+  // Apply walking class for continuous animation
+  if (!player.classList.contains('walking')) {
+    player.classList.remove('moving');
+    player.classList.add('walking');
+    player.dataset.walkDir = direction > 0 ? 'right' : 'left';
+  }
+  // Move immediately then repeat while held
+  movePlayer(direction);
+  clearInterval(walkInterval);
+  walkInterval = setInterval(() => { if (state.playing && !state.isPaused) movePlayer(direction); }, 40);
+}
+function stopWalking(direction) {
+  heldKeys.delete(direction);
+  if (heldKeys.size === 0) {
+    clearInterval(walkInterval); walkInterval = null;
+    player.classList.remove('walking');
+    player.classList.remove('moving');
+    player.classList.add('idle-settle');
+    setTimeout(() => player.classList.remove('idle-settle'), 220);
+  }
+}
+document.addEventListener('keydown', event => { const key = event.key.toLowerCase(); if (key === 'escape' && (state.playing || state.isPaused)) { event.preventDefault(); togglePause(); return; } if (key === ' ' || event.code === 'Space') { event.preventDefault(); fireBlaster(); return; } if (['arrowleft','arrowright','a','d'].includes(key)) { event.preventDefault(); if (!event.repeat) { if (key === 'arrowleft' || key === 'a') startWalking(-1); if (key === 'arrowright' || key === 'd') startWalking(1); } } });
+document.addEventListener('keyup', event => { const key = event.key.toLowerCase(); if (key === 'arrowleft' || key === 'a') stopWalking(-1); if (key === 'arrowright' || key === 'd') stopWalking(1); });
 document.querySelectorAll('.difficulty').forEach(button => button.addEventListener('click', () => { selectedDifficulty = button.dataset.difficulty; playTone('good'); document.querySelectorAll('.difficulty').forEach(item => item.classList.toggle('active', item === button)); }));
-$('start-button').addEventListener('click', startGame); $('again-button').addEventListener('click', startGame); $('menu-button').addEventListener('click', goToMenu); $('pause-button').addEventListener('click', togglePause); $('blast-button').addEventListener('click', () => fireBlaster()); $('resume-button').addEventListener('click', resumeGame); $('quit-pause-button').addEventListener('click', goToMenu); $('left-button').addEventListener('pointerdown', () => movePlayer(-1)); $('right-button').addEventListener('pointerdown', () => movePlayer(1));
+$('start-button').addEventListener('click', startGame); $('again-button').addEventListener('click', startGame); $('menu-button').addEventListener('click', goToMenu); $('pause-button').addEventListener('click', togglePause); $('blast-button').addEventListener('click', () => fireBlaster()); $('resume-button').addEventListener('click', resumeGame); $('quit-pause-button').addEventListener('click', goToMenu);
+// Touch buttons: hold to walk continuously
+$('left-button').addEventListener('pointerdown', e => { e.currentTarget.setPointerCapture(e.pointerId); startWalking(-1); });
+$('left-button').addEventListener('pointerup', () => stopWalking(-1));
+$('left-button').addEventListener('pointercancel', () => stopWalking(-1));
+$('right-button').addEventListener('pointerdown', e => { e.currentTarget.setPointerCapture(e.pointerId); startWalking(1); });
+$('right-button').addEventListener('pointerup', () => stopWalking(1));
+$('right-button').addEventListener('pointercancel', () => stopWalking(1));
 wordsContainer.addEventListener('click', event => { const element = event.target.closest('.falling-word'); if (element) fireBlaster(element); });
  $('sound-button').addEventListener('click', () => { soundEnabled = !soundEnabled; $('sound-button').textContent = soundEnabled ? '🔊' : '🔇'; $('sound-button').classList.toggle('muted', !soundEnabled); if (soundEnabled) { ensureAudio(); startMusic(); playTone('good'); } else stopMusic(); });
 $('how-button').addEventListener('click', () => $('how-panel').classList.remove('hidden')); $('close-how').addEventListener('click', () => $('how-panel').classList.add('hidden')); $('how-panel').addEventListener('click', event => { if (event.target === $('how-panel')) $('how-panel').classList.add('hidden'); });
